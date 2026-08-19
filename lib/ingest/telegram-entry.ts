@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { classifyMessage, resolveCategory, transcribeAudio, type ClassifiedEntry } from "@/lib/ingest/classify";
+import { classifyMessage, resolveCategory, shouldAutoPostEntry, transcribeAudio, type ClassifiedEntry } from "@/lib/ingest/classify";
 import { postClassifiedEntry } from "@/lib/ingest/post-entry";
 import { formatBRL } from "@/lib/money/brl";
 import type { TelegramMessage } from "@/lib/telegram/client";
@@ -65,11 +65,7 @@ export async function postTelegramEntry(
     rawText,
     description: classified.description,
   });
-  const autoPost =
-    classified.amountCents > 0 &&
-    Boolean(category) &&
-    !classified.needsReview &&
-    classified.confidence >= 0.65;
+  const autoPost = shouldAutoPostEntry(classified, category);
 
   const { data: inbound, error: inboundError } = await supabase
     .from("inbound_messages")

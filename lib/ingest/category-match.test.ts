@@ -39,3 +39,16 @@ test("prioriza categoria da IA quando válida", () => {
   });
   assert.equal(resolved?.name, "Compras online");
 });
+
+test("bolo vira Mercado, não Outros", () => {
+  const inferred = inferLabelAndCategory("gastei 35 reais no bolo", categories);
+  assert.equal(inferred.categoryName, "Mercado");
+  assert.equal(inferred.label, "Bolo");
+
+  const resolved = resolveCategory(categories, {
+    categoryName: "Outros",
+    label: "Bolo",
+    rawText: "gastei 35 reais no bolo",
+  });
+  assert.equal(resolved?.name, "Mercado");
+});

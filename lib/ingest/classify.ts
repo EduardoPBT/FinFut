@@ -1,5 +1,6 @@
 import type { Category, PaymentMethod } from "@/lib/types";
 import {
+  inferFoodContext,
   inferLabelAndCategory,
   normalizeLabel,
   resolveCategory,
@@ -26,6 +27,45 @@ const METHODS = new Set<PaymentMethod>(["pix", "debito", "credito", "boleto", "o
 
 export { matchCategoryByName, normalizeLabel, resolveCategory } from "@/lib/ingest/category-match";
 
+/** Inbox só para lançamentos realmente incertos; gastos claros vão direto. */
+export function shouldAutoPostEntry(
+  classified: ClassifiedEntry,
+  category: Category | null,
+): boolean {
+  if (classified.amountCents <= 0 || !category) return false;
+  if (classified.confidence < 0.4) return false;
+  if (classified.needsReview && classified.confidence < 0.55) return false;
+  return true;
+}
+
+function finalizeClassifiedEntry(
+  classified: ClassifiedEntry,
+  raw: string,
+  category: Category | null,
+) {
+  const food = inferFoodContext(raw);
+  if (food?.label && !classified.label) {
+    classified.label = food.label;
+  }
+
+  if (!category || classified.amountCents <= 0) return;
+
+  classified.categoryName = category.name;
+
+  if (detectAmbiguousMercado(raw, classified)) {
+    classified.needsReview = true;
+    classified.confidence = Math.min(classified.confidence, 0.65);
+    return;
+  }
+
+  if (category.name !== "Outros" || food) {
+    classified.needsReview = false;
+    classified.confidence = Math.max(classified.confidence, 0.72);
+  } else if (classified.label && classified.confidence >= 0.5) {
+    classified.needsReview = classified.needsReview && classified.confidence < 0.55;
+  }
+}
+
 export function classifiedFromRegex(raw: string, categories: Category[] = []): ClassifiedEntry {
   const parsed = parseMessage(raw);
   const paymentMethod: PaymentMethod = parsed.cardHint
@@ -42,10 +82,10 @@ export function classifiedFromRegex(raw: string, categories: Category[] = []): C
     rawText: raw,
     description: parsed.description,
   });
-  return {
+  const result: ClassifiedEntry = {
     amountCents: parsed.amountCents,
     description: parsed.description,
-    label: inferred.label,
+    label: inferred.label ?? inferFoodContext(raw)?.label ?? null,
     kind: parsed.kindHint,
     paymentMethod,
     installments: parsed.installments,
@@ -54,6 +94,8 @@ export function classifiedFromRegex(raw: string, categories: Category[] = []): C
     confidence: matched ? 0.72 : 0.55,
     needsReview: !matched,
   };
+  finalizeClassifiedEntry(result, raw, matched);
+  return result;
 }
 
 export function classifiedFromModel(payload: Record<string, unknown>): ClassifiedEntry {
@@ -88,7 +130,7 @@ export function classifiedFromModel(payload: Record<string, unknown>): Classifie
     categoryName: payload.category_name ? String(payload.category_name) : null,
     occurredOn,
     confidence,
-    needsReview: Boolean(payload.needs_review) || confidence < 0.75,
+    needsReview: Boolean(payload.needs_review) && confidence < 0.55,
   };
 }
 
@@ -175,11 +217,12 @@ function buildClassifierPrompt(categories: Category[]) {
     "Regras importantes:\n" +
     "1. label ≠ category_name. label é micro (loja/app); category_name é macro (tipo de gasto).\n" +
     "2. Mercado Livre, Amazon, Shopee, Magalu, Shein = Compras online — NÃO use Mercado (supermercado).\n" +
-    "3. Mercado, supermercado, feira, hortifruti, padaria = Mercado.\n" +
+    "3. Mercado, supermercado, feira, hortifruti, padaria, confeitaria, doceria, bolo, pão, doces = Mercado (label = item ou estabelecimento).\n" +
     "4. iFood, Rappi, delivery = Delivery.\n" +
-    "5. Se não couber bem, use Outros e needs_review=true.\n" +
-    "6. 'parcelado em N vezes' ou 'Nx' → payment_method=credito, installments=N.\n" +
-    "7. Se não disser forma de pagamento em despesa, use pix.\n\n" +
+    "5. needs_review=true SOMENTE se valor, tipo ou categoria estiverem realmente ambíguos. Gastos claros com valor e contexto devem ter needs_review=false e confidence>=0.8.\n" +
+    "6. Evite Outros quando Mercado ou Delivery couberem melhor.\n" +
+    "7. 'parcelado em N vezes' ou 'Nx' → payment_method=credito, installments=N.\n" +
+    "8. Se não disser forma de pagamento em despesa, use pix.\n\n" +
     `Hoje: ${todayISO()}\n\n` +
     "Categorias disponíveis:\n" +
     catalog
@@ -226,13 +269,7 @@ export async function classifyMessage(raw: string, categories: Category[]): Prom
     rawText: raw,
     description: classified.description,
   });
-  if (resolved) {
-    classified.categoryName = resolved.name;
-    if (detectAmbiguousMercado(raw, classified)) {
-      classified.needsReview = true;
-      classified.confidence = Math.min(classified.confidence, 0.7);
-    }
-  }
+  finalizeClassifiedEntry(classified, raw, resolved);
   return classified;
 }
 

@@ -1,5 +1,26 @@
 import type { Category } from "@/lib/types";
 
+/** Comidas e estabelecimentos alimentícios → categoria macro de orçamento. */
+const FOOD_HINTS: Array<{
+  pattern: RegExp;
+  categoryName: string;
+  label?: string;
+}> = [
+  { pattern: /\bbolo\b/i, categoryName: "Mercado", label: "Bolo" },
+  { pattern: /\bbolos\b/i, categoryName: "Mercado", label: "Bolo" },
+  { pattern: /\bpadaria\b/i, categoryName: "Mercado", label: "Padaria" },
+  { pattern: /\bconfeitaria\b/i, categoryName: "Mercado", label: "Confeitaria" },
+  { pattern: /\bdoceria\b/i, categoryName: "Mercado", label: "Doceria" },
+  { pattern: /\bp[aã]o\b/i, categoryName: "Mercado", label: "Pão" },
+  { pattern: /\bpaes\b|\bpães\b/i, categoryName: "Mercado", label: "Pão" },
+  { pattern: /\bfeira\b/i, categoryName: "Mercado", label: "Feira" },
+  { pattern: /\bhortifruti\b/i, categoryName: "Mercado", label: "Hortifruti" },
+  { pattern: /\bsupermercado\b/i, categoryName: "Mercado", label: "Supermercado" },
+  { pattern: /\bifood\b/i, categoryName: "Delivery", label: "iFood" },
+  { pattern: /\brappi\b/i, categoryName: "Delivery", label: "Rappi" },
+  { pattern: /\bdelivery\b/i, categoryName: "Delivery" },
+];
+
 /** Marcas/marketplaces que contêm palavras ambíguas (ex.: "mercado" em Mercado Livre). */
 const MARKETPLACE_HINTS: Array<{
   pattern: RegExp;
@@ -45,6 +66,28 @@ function detectMarketplace(text: string) {
   return MARKETPLACE_HINTS.find((item) => item.pattern.test(text)) ?? null;
 }
 
+function detectFoodHint(text: string) {
+  return FOOD_HINTS.find((item) => item.pattern.test(text)) ?? null;
+}
+
+/** Extrai o alvo do gasto após "no/na/em" (ex.: "gastei 35 reais no bolo" → "Bolo"). */
+export function extractExpenseTarget(raw: string): string | null {
+  const match = raw.match(
+    /\b(?:no|na|em|de)\s+([a-záàâãéêíóôõúç0-9][\wáàâãéêíóôõúç-]{0,30}?)(?:\s+(?:no|na|em|por|via|com|parcelado|pix|reais|real|r\$|\d)|$|[,.])/i,
+  );
+  if (!match?.[1]) return null;
+  return normalizeLabel(match[1]);
+}
+
+export function inferFoodContext(raw: string): { categoryName: string; label: string | null } | null {
+  const food = detectFoodHint(raw);
+  if (!food) return null;
+  return {
+    categoryName: food.categoryName,
+    label: food.label ?? extractExpenseTarget(raw),
+  };
+}
+
 export function resolveCategory(
   categories: Category[],
   hints: {
@@ -64,10 +107,20 @@ export function resolveCategory(
     );
   }
 
-  const fromAi = findCategoryByName(categories, hints.categoryName);
-  if (fromAi) return fromAi;
+  const food = detectFoodHint(text);
+  if (food) {
+    const fromFood = findCategoryByName(categories, food.categoryName);
+    if (fromFood) return fromFood;
+  }
 
-  return matchByWholeWords(text, categories);
+  const fromAi = findCategoryByName(categories, hints.categoryName);
+  const aiIsOutros = hints.categoryName?.toLowerCase().trim() === "outros";
+  if (fromAi && !aiIsOutros) return fromAi;
+
+  const fromWords = matchByWholeWords(text, categories);
+  if (fromWords) return fromWords;
+
+  return fromAi;
 }
 
 export function inferLabelAndCategory(
@@ -77,6 +130,11 @@ export function inferLabelAndCategory(
   const marketplace = detectMarketplace(raw);
   if (marketplace) {
     return { label: marketplace.label, categoryName: marketplace.categoryName };
+  }
+
+  const food = inferFoodContext(raw);
+  if (food) {
+    return { label: food.label, categoryName: food.categoryName };
   }
 
   const matched = matchByWholeWords(raw, categories);
