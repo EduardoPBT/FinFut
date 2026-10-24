@@ -51,27 +51,27 @@ test("sessão confirma, cancela e escolhe índice", () => {
 
 test("aceita chat ids antigos e novos separados por vírgula", () => {
   const previous = process.env.TELEGRAM_CHAT_ID;
-  process.env.TELEGRAM_CHAT_ID = "-1004417275590,-5083397589";
+  process.env.TELEGRAM_CHAT_ID = "-1000000000000,-1000000000001";
   assert.deepEqual(parseAllowedChatIds(process.env.TELEGRAM_CHAT_ID), [
-    "-1004417275590",
-    "-5083397589",
+    "-1000000000000",
+    "-1000000000001",
   ]);
-  assert.equal(isAllowedChat("-1004417275590"), true);
-  assert.equal(isAllowedChat("-5083397589"), true);
+  assert.equal(isAllowedChat("-1000000000000"), true);
+  assert.equal(isAllowedChat("-1000000000001"), true);
   assert.equal(isAllowedChat("0"), false);
   process.env.TELEGRAM_CHAT_ID = previous;
 });
 
 test("detecta migração de grupo para supergrupo", () => {
   const previous = process.env.TELEGRAM_CHAT_ID;
-  process.env.TELEGRAM_CHAT_ID = "-5083397589";
+  process.env.TELEGRAM_CHAT_ID = "-1000000000001";
   assert.equal(
     successorChatId({
       message_id: 1,
-      chat: { id: -5083397589 },
-      migrate_to_chat_id: -1004417275590,
+      chat: { id: -1000000000001 },
+      migrate_to_chat_id: -1000000000000,
     }),
-    "-1004417275590",
+    "-1000000000000",
   );
   process.env.TELEGRAM_CHAT_ID = previous;
 });
