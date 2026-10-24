@@ -1,0 +1,4 @@
+[build.environment]
+  # OPENAI_MODEL holds a public model name (e.g. gpt-4o-mini), not a secret. Its value
+  # also appears as a fallback in source code and the compiled server bundle.
+  SECRETS_SCAN_OMIT_KEYS = "OPENAI_MODEL"
