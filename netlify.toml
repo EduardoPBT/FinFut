@@ -1,4 +1,7 @@
 [build.environment]
-  # OPENAI_MODEL holds a public model name (e.g. gpt-4o-mini), not a secret. Its value
-  # also appears as a fallback in source code and the compiled server bundle.
-  SECRETS_SCAN_OMIT_KEYS = "OPENAI_MODEL"
+  # These values are public by design, not secrets:
+  # - OPENAI_MODEL is a model name that also appears as a fallback in source code.
+  # - NEXT_PUBLIC_* values are inlined by Next.js into the browser bundle
+  #   (the Supabase URL and publishable key are meant to be public).
+  # - APP_URL is the site's public URL.
+  SECRETS_SCAN_OMIT_KEYS = "OPENAI_MODEL,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,APP_URL"
