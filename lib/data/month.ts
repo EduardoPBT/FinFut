@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveBillDisplayStatus } from "@/lib/money/bill-status";
 import { resolveIncomeDisplayStatus } from "@/lib/money/income-status";
 import { recordIncomeReceipt, repairOrphanIncomeReceiptAccounts, shouldAutoReceiveIncome } from "@/lib/money/income-receipt";
-import { dueOnForMonth, todayISO } from "@/lib/money/competence";
+import { dueOnForMonth, parseYearMonth, todayISO } from "@/lib/money/competence";
 import type {
   AnnualEvent,
   BillInstance,
@@ -251,12 +251,47 @@ export async function fetchMonthData(
   };
 }
 
-export async function loadMonthData(householdId: string, competence: Competence) {
+export function isCurrentCompetence(competence: Competence) {
+  return competence.yearMonth === parseYearMonth().yearMonth;
+}
+
+/** Escritas mensais (contas/receitas/auto-receive). Só rode no mês atual ou quando necessário. */
+export async function syncMonthSideEffects(
+  householdId: string,
+  competence: Competence,
+  options?: { repairOrphans?: boolean },
+) {
   const supabase = await createClient();
   const today = todayISO();
   await ensureBillInstances(householdId, competence);
   await ensureIncomeInstances(householdId, competence);
+  if (!isCurrentCompetence(competence)) return;
+
   await syncAutoReceivedIncomeInstances(householdId, today);
-  await repairOrphanIncomeReceiptAccounts(supabase, householdId);
+  if (options?.repairOrphans !== false) {
+    await repairOrphanIncomeReceiptAccounts(supabase, householdId);
+  }
+}
+
+export async function syncCurrentMonth(householdId: string) {
+  await syncMonthSideEffects(householdId, parseYearMonth());
+}
+
+export async function loadMonthData(
+  householdId: string,
+  competence: Competence,
+  options?: { sync?: boolean },
+) {
+  const supabase = await createClient();
+  const today = todayISO();
+  const shouldSync = options?.sync ?? true;
+  if (shouldSync) {
+    await syncMonthSideEffects(householdId, competence);
+  }
   return fetchMonthData(supabase, householdId, competence, today);
+}
+
+/** Leitura pura — sem UPSERTs nem repair. Use em histórico/trend. */
+export async function readMonthData(householdId: string, competence: Competence) {
+  return loadMonthData(householdId, competence, { sync: false });
 }

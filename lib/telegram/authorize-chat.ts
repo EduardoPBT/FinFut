@@ -18,14 +18,6 @@ export async function authorizeTelegramChat(
   message: TelegramMessage,
 ) {
   const incoming = String(message.chat.id);
-  const { data: houses } = await supabase
-    .from("households")
-    .select("id, telegram_chat_id")
-    .not("telegram_chat_id", "is", null);
-  const linkedIds = (houses ?? [])
-    .map((item) => item.telegram_chat_id)
-    .filter((item): item is string => Boolean(item));
-
   const migrated = successorChatId(message);
   if (migrated) {
     const household = await resolveHousehold(supabase, incoming);
@@ -33,7 +25,7 @@ export async function authorizeTelegramChat(
     return { ok: true as const, chatId: migrated, threadId: message.message_thread_id, migrated: true };
   }
 
-  if (isAllowedChat(incoming, linkedIds)) {
+  if (isAllowedChat(incoming)) {
     return { ok: true as const, chatId: incoming, threadId: message.message_thread_id };
   }
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendTelegramMessage, type TelegramUpdate } from "@/lib/telegram/client";
+import { syncCurrentMonth } from "@/lib/data/month";
 import { loadHouseholdContext, resolveHousehold } from "@/lib/finance/context";
 import { formatHelp } from "@/lib/finance/format-telegram";
 import { routeTelegramText } from "@/lib/telegram/router";
@@ -48,6 +49,7 @@ export async function handleTelegramUpdate(
 
   const household = await resolveHousehold(supabase, auth.chatId);
   const context = await loadHouseholdContext(supabase, household.id);
+  await syncCurrentMonth(household.id);
 
   try {
     const rawText = await extractMessageText(message, incomingText);
@@ -73,12 +75,12 @@ export async function handleTelegramUpdate(
       return { command: true };
     }
     if (intent === "question") {
-      const answered = await handleQuestion(supabase, household.id, rawText);
+      const answered = await handleQuestion(supabase, household.id, rawText, context);
       if (answered.handled) {
         await reply(answered.reply);
         return { question: true };
       }
-      await reply(await handleAgent(supabase, household.id, Number(auth.chatId), rawText));
+      await reply(await handleAgent(supabase, household.id, Number(auth.chatId), rawText, context));
       return { agent: true };
     }
     if (intent === "edit") {
@@ -100,7 +102,7 @@ export async function handleTelegramUpdate(
       );
     }
 
-    await reply(await handleAgent(supabase, household.id, Number(auth.chatId), rawText));
+    await reply(await handleAgent(supabase, household.id, Number(auth.chatId), rawText, context));
     return { agent: true };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Falha ao ler";

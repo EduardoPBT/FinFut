@@ -1,7 +1,8 @@
 export type MemberRole = "voce" | "esposa";
 export type IncomeKind = "fixo" | "variavel";
 export type CategoryKind = "receita" | "fixa" | "variavel";
-export type TransactionOrigin = "app" | "whatsapp" | "telegram";
+export type TransactionOrigin = "app" | "whatsapp" | "telegram" | "ofx";
+export type StatementImportKind = "extrato" | "fatura";
 export type BillStatus = "pendente" | "pago" | "atrasado";
 export type BillDisplayStatus = BillStatus | "vence_hoje";
 export type IncomeInstanceStatus = "pendente" | "recebido";
@@ -225,6 +226,22 @@ export type AnnualEvent = {
   due_day: number;
   category_id: string | null;
   active: boolean;
+};
+
+export type StatementImport = {
+  id: string;
+  household_id: string;
+  kind: StatementImportKind;
+  bank_account_id: string | null;
+  credit_card_id: string | null;
+  file_name: string;
+  imported_count: number;
+  skipped_count: number;
+  created_at: string;
+};
+
+export type StatementImportView = StatementImport & {
+  targetName: string;
 };
 
 export type InboundMessage = {

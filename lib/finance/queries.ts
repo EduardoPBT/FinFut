@@ -4,7 +4,7 @@ import { loadAccountMovements, loadUpcomingStatements } from "@/lib/data/ledger"
 import { insightsFromMonth } from "@/lib/data/insights";
 import { balancesByAccount, householdCashCents } from "@/lib/money/account-balance";
 import { parseYearMonth, shiftYearMonth } from "@/lib/money/competence";
-import { loadHouseholdContext } from "@/lib/finance/context";
+import { loadHouseholdContext, type HouseholdContext } from "@/lib/finance/context";
 import type { CardCharge, Category, InboundMessage, Transaction } from "@/lib/types";
 
 export type FinanceEntryKind = "transaction" | "charge";
@@ -59,21 +59,22 @@ export async function loadMonthSnapshot(
   supabase: SupabaseClient,
   householdId: string,
   competence?: Competence,
+  ctx?: HouseholdContext,
 ) {
-  const ctx = await loadHouseholdContext(supabase, householdId);
+  const context = ctx ?? (await loadHouseholdContext(supabase, householdId));
   const monthCompetence = competence ?? parseYearMonth();
   const month = await fetchMonthData(supabase, householdId, monthCompetence);
   const insights = insightsFromMonth({
     incomeSources: month.incomeSources,
     incomeInstances: month.incomeInstances,
-    categories: ctx.categories,
+    categories: context.categories,
     transactions: month.transactions,
     billInstances: month.billInstances,
     cardCharges: month.cardCharges,
     goals: month.goals,
     annualEvents: month.annualEvents,
     budgets: month.budgets,
-    members: ctx.members,
+    members: context.members,
   });
   const incomeCents = month.transactions
     .filter((item) => item.movement_kind === "receita")
@@ -84,14 +85,14 @@ export async function loadMonthSnapshot(
   const cardExpenseCents = month.cardCharges.reduce((sum, item) => sum + item.amount_cents, 0);
   const expenseCents = cashExpenseCents + cardExpenseCents;
   return {
-    ctx,
+    ctx: context,
     month,
     insights,
     competence: monthCompetence,
     incomeCents,
     expenseCents,
     remainingCents: incomeCents - expenseCents,
-    entries: toEntries(month.transactions, month.cardCharges, ctx.categories),
+    entries: toEntries(month.transactions, month.cardCharges, context.categories),
   };
 }
 
@@ -100,8 +101,9 @@ export async function spendingByCategory(
   householdId: string,
   categoryName: string,
   competence?: Competence,
+  ctx?: HouseholdContext,
 ) {
-  const snapshot = await loadMonthSnapshot(supabase, householdId, competence);
+  const snapshot = await loadMonthSnapshot(supabase, householdId, competence, ctx);
   const needle = categoryName.toLowerCase().trim();
   const cents = snapshot.entries
     .filter((item) => item.categoryName.toLowerCase() === needle)
@@ -118,13 +120,18 @@ export async function listRecentEntries(
   supabase: SupabaseClient,
   householdId: string,
   limit = 5,
+  ctx?: HouseholdContext,
 ) {
-  const snapshot = await loadMonthSnapshot(supabase, householdId);
+  const snapshot = await loadMonthSnapshot(supabase, householdId, undefined, ctx);
   return snapshot.entries.slice(0, Math.min(20, Math.max(1, limit)));
 }
 
-export async function listPendingBills(supabase: SupabaseClient, householdId: string) {
-  const snapshot = await loadMonthSnapshot(supabase, householdId);
+export async function listPendingBills(
+  supabase: SupabaseClient,
+  householdId: string,
+  ctx?: HouseholdContext,
+) {
+  const snapshot = await loadMonthSnapshot(supabase, householdId, undefined, ctx);
   const billById = new Map(snapshot.month.recurringBills.map((item) => [item.id, item]));
   return snapshot.month.billInstances
     .filter((item) => item.status !== "pago")
@@ -183,10 +190,15 @@ export async function listCardStatements(supabase: SupabaseClient, householdId: 
   }));
 }
 
-export async function compareWithPreviousMonth(supabase: SupabaseClient, householdId: string) {
-  const current = await loadMonthSnapshot(supabase, householdId);
+export async function compareWithPreviousMonth(
+  supabase: SupabaseClient,
+  householdId: string,
+  ctx?: HouseholdContext,
+) {
+  const context = ctx ?? (await loadHouseholdContext(supabase, householdId));
+  const current = await loadMonthSnapshot(supabase, householdId, undefined, context);
   const previousCompetence = parseYearMonth(shiftYearMonth(current.competence.yearMonth, -1));
-  const previous = await loadMonthSnapshot(supabase, householdId, previousCompetence);
+  const previous = await loadMonthSnapshot(supabase, householdId, previousCompetence, context);
   return {
     currentYearMonth: current.competence.yearMonth,
     previousYearMonth: previous.competence.yearMonth,
@@ -205,8 +217,9 @@ export async function searchFinanceEntries(
     notes?: string;
     limit?: number;
   },
+  ctx?: HouseholdContext,
 ) {
-  const snapshot = await loadMonthSnapshot(supabase, householdId);
+  const snapshot = await loadMonthSnapshot(supabase, householdId, undefined, ctx);
   const needle = filters.category?.toLowerCase().trim();
   const notesNeedle = filters.notes?.toLowerCase().trim();
   return snapshot.entries

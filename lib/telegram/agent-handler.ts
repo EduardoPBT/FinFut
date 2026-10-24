@@ -12,7 +12,7 @@ import {
 import { startEditFlow } from "@/lib/telegram/edit-handler";
 import { handleQuestion } from "@/lib/telegram/qa-handler";
 import { postTelegramEntry } from "@/lib/ingest/telegram-entry";
-import { loadHouseholdContext } from "@/lib/finance/context";
+import { type HouseholdContext } from "@/lib/finance/context";
 
 type ToolCall = {
   id: string;
@@ -147,6 +147,7 @@ async function runTool(
   chatId: number,
   name: string,
   args: Record<string, unknown>,
+  ctx: HouseholdContext,
 ) {
   if (WRITE_TOOLS.has(name) && args.confirmed !== true) {
     const started = await startEditFlow(supabase, householdId, String(chatId), String(args.raw_text ?? ""));
@@ -158,7 +159,7 @@ async function runTool(
 
   switch (name) {
     case "get_month_summary": {
-      const snapshot = await loadMonthSnapshot(supabase, householdId);
+      const snapshot = await loadMonthSnapshot(supabase, householdId, undefined, ctx);
       return formatMonthSummary({
         yearMonth: snapshot.competence.yearMonth,
         incomeCents: snapshot.incomeCents,
@@ -168,27 +169,31 @@ async function runTool(
     }
     case "get_spending_by_category":
       return formatSpendingByCategory(
-        await spendingByCategory(supabase, householdId, String(args.category ?? "")),
+        await spendingByCategory(supabase, householdId, String(args.category ?? ""), undefined, ctx),
       );
     case "list_recent_entries": {
-      const entries = await listRecentEntries(supabase, householdId, Number(args.limit ?? 5));
+      const entries = await listRecentEntries(supabase, householdId, Number(args.limit ?? 5), ctx);
       return JSON.stringify(entries);
     }
     case "get_card_statement":
       return JSON.stringify(await listCardStatements(supabase, householdId));
     case "get_pending_bills":
-      return JSON.stringify(await listPendingBills(supabase, householdId));
+      return JSON.stringify(await listPendingBills(supabase, householdId, ctx));
     case "get_inbox":
       return JSON.stringify(await listInbox(supabase, householdId));
     case "search_entries":
       return JSON.stringify(
-        await searchFinanceEntries(supabase, householdId, {
-          amountCents: args.amount_cents ? Number(args.amount_cents) : undefined,
-          category: args.category ? String(args.category) : undefined,
-        }),
+        await searchFinanceEntries(
+          supabase,
+          householdId,
+          {
+            amountCents: args.amount_cents ? Number(args.amount_cents) : undefined,
+            category: args.category ? String(args.category) : undefined,
+          },
+          ctx,
+        ),
       );
     case "create_entry": {
-      const ctx = await loadHouseholdContext(supabase, householdId);
       const result = await postTelegramEntry(
         supabase,
         householdId,
@@ -209,10 +214,11 @@ export async function handleAgent(
   householdId: string,
   chatId: number,
   text: string,
+  ctx: HouseholdContext,
 ) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
-    const fallback = await handleQuestion(supabase, householdId, text);
+    const fallback = await handleQuestion(supabase, householdId, text, ctx);
     return fallback.reply;
   }
 
@@ -242,7 +248,7 @@ export async function handleAgent(
       }),
     });
     if (!response.ok) {
-      const fallback = await handleQuestion(supabase, householdId, text);
+      const fallback = await handleQuestion(supabase, householdId, text, ctx);
       return fallback.reply;
     }
     const payload = (await response.json()) as {
@@ -259,7 +265,7 @@ export async function handleAgent(
         } catch {
           args = {};
         }
-        const result = await runTool(supabase, householdId, chatId, call.function.name, args);
+        const result = await runTool(supabase, householdId, chatId, call.function.name, args, ctx);
         messages.push({ role: "tool", tool_call_id: call.id, content: result });
       }
       continue;
@@ -268,7 +274,7 @@ export async function handleAgent(
     break;
   }
 
-  const fallback = await handleQuestion(supabase, householdId, text);
+  const fallback = await handleQuestion(supabase, householdId, text, ctx);
   if (fallback.handled) return fallback.reply;
   return "Não encontrei dados para isso. Tente /help.";
 }

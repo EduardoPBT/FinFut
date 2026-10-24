@@ -2,10 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { addCalendarDays } from "@/lib/money/card-cycle";
 import { dueOnForMonth, parseYearMonth, todayISO } from "@/lib/money/competence";
 import { householdCashCents, type BalanceMovement } from "@/lib/money/account-balance";
-import {
-  eventDateForProjection,
-  repairOrphanIncomeReceiptAccounts,
-} from "@/lib/money/income-receipt";
+import { eventDateForProjection } from "@/lib/money/income-receipt";
 import { projectCashflow, type CashflowEvent } from "@/lib/money/cashflow";
 import { loadAccountMovements, loadUpcomingStatements } from "@/lib/data/ledger";
 import type { AnnualEvent, BankAccount, BillInstance, IncomeInstance } from "@/lib/types";
@@ -23,19 +20,24 @@ function sumScheduled(events: CashflowEvent[], sign: "in" | "out") {
     .reduce((sum, event) => sum + Math.abs(event.cents), 0);
 }
 
+type UpcomingStatement = Awaited<ReturnType<typeof loadUpcomingStatements>>[number];
+
 export async function loadCashflowProjection(
   householdId: string,
   accounts: BankAccount[],
-  extra?: { annualEvents?: AnnualEvent[] },
+  extra?: {
+    annualEvents?: AnnualEvent[];
+    movements?: BalanceMovement[];
+    statements?: UpcomingStatement[];
+  },
 ) {
   const supabase = await createClient();
-  await repairOrphanIncomeReceiptAccounts(supabase, householdId);
-
   const today = todayISO();
   const horizon = addCalendarDays(today, 44);
-  const movements = (await loadAccountMovements(householdId)) as BalanceMovement[];
+  const movements =
+    extra?.movements ?? ((await loadAccountMovements(householdId)) as BalanceMovement[]);
   const startBalanceCents = householdCashCents(accounts, movements);
-  const statements = await loadUpcomingStatements(householdId);
+  const statements = extra?.statements ?? (await loadUpcomingStatements(householdId));
 
   const [{ data: bills }, { data: incomes }] = await Promise.all([
     supabase

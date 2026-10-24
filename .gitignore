@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local credentials and CLI state
+/acess_key/
+/supabase/.temp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

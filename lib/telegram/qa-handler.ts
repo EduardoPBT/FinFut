@@ -7,7 +7,7 @@ import {
   formatSpendingByCategory,
   formatStatements,
 } from "@/lib/finance/format-telegram";
-import { loadHouseholdContext } from "@/lib/finance/context";
+import { loadHouseholdContext, type HouseholdContext } from "@/lib/finance/context";
 import {
   compareWithPreviousMonth,
   listCardStatements,
@@ -22,11 +22,12 @@ export async function handleQuestion(
   supabase: SupabaseClient,
   householdId: string,
   text: string,
+  ctx?: HouseholdContext,
 ) {
-  const ctx = await loadHouseholdContext(supabase, householdId);
+  const context = ctx ?? (await loadHouseholdContext(supabase, householdId));
   const classified = await classifyQuestion(
     text,
-    ctx.categories.map((item) => item.name),
+    context.categories.map((item) => item.name),
   );
   if (classified.intent === "unknown" || classified.confidence < 0.7) {
     return { handled: false as const, reply: "Não entendi a pergunta. Tente /help ou seja mais específico." };
@@ -39,7 +40,7 @@ export async function handleQuestion(
 
   switch (classified.intent) {
     case "month_summary": {
-      const snapshot = await loadMonthSnapshot(supabase, householdId, competence);
+      const snapshot = await loadMonthSnapshot(supabase, householdId, competence, context);
       return {
         handled: true as const,
         reply: formatMonthSummary({
@@ -52,7 +53,7 @@ export async function handleQuestion(
     }
     case "spending_by_category": {
       const category = classified.category ?? "Outros";
-      const spent = await spendingByCategory(supabase, householdId, category, competence);
+      const spent = await spendingByCategory(supabase, householdId, category, competence, context);
       return { handled: true as const, reply: formatSpendingByCategory(spent) };
     }
     case "card_statement":
@@ -63,10 +64,10 @@ export async function handleQuestion(
     case "pending_bills":
       return {
         handled: true as const,
-        reply: formatPendingBills(await listPendingBills(supabase, householdId)),
+        reply: formatPendingBills(await listPendingBills(supabase, householdId, context)),
       };
     case "budget_status": {
-      const snapshot = await loadMonthSnapshot(supabase, householdId, competence);
+      const snapshot = await loadMonthSnapshot(supabase, householdId, competence, context);
       const envelopes = snapshot.insights.envelopes ?? [];
       if (envelopes.length === 0) {
         return { handled: true as const, reply: "Nenhum envelope de orçamento cadastrado." };
@@ -78,7 +79,7 @@ export async function handleQuestion(
       return { handled: true as const, reply: lines.join("\n") };
     }
     case "compare_periods": {
-      const compared = await compareWithPreviousMonth(supabase, householdId);
+      const compared = await compareWithPreviousMonth(supabase, householdId, context);
       const verb = compared.deltaCents >= 0 ? "mais" : "menos";
       return {
         handled: true as const,

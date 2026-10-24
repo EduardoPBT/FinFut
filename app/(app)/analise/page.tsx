@@ -8,7 +8,7 @@ import { loadMonthData } from "@/lib/data/month";
 import { insightsFromMonth } from "@/lib/data/insights";
 import { loadSixMonthTrend } from "@/lib/data/history";
 import { loadCashflowProjection } from "@/lib/data/projections";
-import { loadUpcomingStatements } from "@/lib/data/ledger";
+import { loadAccountMovements, loadUpcomingStatements } from "@/lib/data/ledger";
 import { loadPlanningExtras } from "@/lib/data/planning";
 import { committedCardCents, emergencyMonths } from "@/lib/money/cashflow";
 import { monthLabel, parseYearMonth } from "@/lib/money/competence";
@@ -21,15 +21,18 @@ export default async function AnalisePage({
   const { mes } = await searchParams;
   const competence = parseYearMonth(mes);
   const workspace = await loadWorkspace();
-  const month = await loadMonthData(workspace.household.id, competence);
   const extras = await loadPlanningExtras(workspace.household.id);
-  const [trend, cashflow, statements] = await Promise.all([
+  const [month, trend, movements, statements] = await Promise.all([
+    loadMonthData(workspace.household.id, competence),
     loadSixMonthTrend(workspace.household.id, workspace.categories, competence.yearMonth),
-    loadCashflowProjection(workspace.household.id, workspace.bankAccounts, {
-      annualEvents: extras.annualEvents,
-    }),
+    loadAccountMovements(workspace.household.id),
     loadUpcomingStatements(workspace.household.id),
   ]);
+  const cashflow = await loadCashflowProjection(workspace.household.id, workspace.bankAccounts, {
+    annualEvents: extras.annualEvents,
+    movements,
+    statements,
+  });
   const insights = insightsFromMonth({
     incomeSources: month.incomeSources,
     incomeInstances: month.incomeInstances,

@@ -12,6 +12,7 @@ const items = [
   { href: "/cartoes", label: "Cartões", icon: "▣" },
   { href: "/objetivos", label: "Metas", icon: "❀" },
   { href: "/analise", label: "Olhar", icon: "◎" },
+  { href: "/importacoes", label: "Importar", icon: "⇩" },
   { href: "/entrada", label: "Inbox", icon: "✉" },
 ];
 

@@ -37,6 +37,29 @@ const MARKETPLACE_HINTS: Array<{
   { pattern: /\bamericanas\b/i, label: "Americanas", categoryName: "Compras online" },
 ];
 
+/** Estabelecimentos comuns em OFX/planilha → categoria macro. */
+const MERCHANT_HINTS: Array<{
+  pattern: RegExp;
+  label: string;
+  categoryName: string;
+}> = [
+  { pattern: /\buber\s*eats\b/i, label: "Uber Eats", categoryName: "Delivery" },
+  { pattern: /\buber\b/i, label: "Uber", categoryName: "Transporte" },
+  { pattern: /\b99\s*(app|pop|pay|food|ride)\b|\bindrive\b|\bcabify\b/i, label: "Corrida", categoryName: "Transporte" },
+  { pattern: /\bnetflix\b/i, label: "Netflix", categoryName: "Streaming" },
+  { pattern: /\bspotify\b/i, label: "Spotify", categoryName: "Streaming" },
+  { pattern: /\bdisney\+?|\bhbo\b|\bprime\s*video\b|\bgloboplay\b|\byoutube\s*premium\b/i, label: "Streaming", categoryName: "Streaming" },
+  { pattern: /\bdrogasil\b|\bdrogaraia\b|\bpague\s*menos\b|\bultrafarma\b|\bfarm[aá]cia\b/i, label: "Farmácia", categoryName: "Farmácia" },
+  { pattern: /\bsmart\s*fit\b|\bbluefit\b|\bgympass\b|\bselfit\b|\bacademia\b/i, label: "Academia", categoryName: "Academia" },
+  { pattern: /\bunimed\b|\bamil\b|\bsulam[eé]rica\b/i, label: "Plano de saúde", categoryName: "Saúde" },
+  { pattern: /\benel\b|\bcpfl\b|\blight\b|\bcemig\b|\bcopel\b/i, label: "Energia", categoryName: "Energia" },
+  { pattern: /\bsabesp\b|\bcedae\b|\bcagece\b/i, label: "Água", categoryName: "Água" },
+  { pattern: /\bvivo\b|\bclaro\b|\btim\b|\bvirtua\b/i, label: "Telefone", categoryName: "Celular" },
+  { pattern: /\baluguel\b|\bcondom[ií]nio\b/i, label: "Moradia", categoryName: "Moradia" },
+  { pattern: /\bcinemark\b|\buci\b|\bcinema\b/i, label: "Cinema", categoryName: "Lazer" },
+  { pattern: /\brenner\b|\briachuelo\b|\bzara\b|\bc&a\b/i, label: "Roupa", categoryName: "Vestuário" },
+];
+
 export function normalizeLabel(label: string | null | undefined): string | null {
   if (!label) return null;
   const words = label.trim().split(/\s+/).filter(Boolean).slice(0, 3);
@@ -68,6 +91,10 @@ function detectMarketplace(text: string) {
 
 function detectFoodHint(text: string) {
   return FOOD_HINTS.find((item) => item.pattern.test(text)) ?? null;
+}
+
+function detectMerchant(text: string) {
+  return MERCHANT_HINTS.find((item) => item.pattern.test(text)) ?? null;
 }
 
 /** Extrai o alvo do gasto após "no/na/em" (ex.: "gastei 35 reais no bolo" → "Bolo"). */
@@ -113,6 +140,12 @@ export function resolveCategory(
     if (fromFood) return fromFood;
   }
 
+  const merchant = detectMerchant(text);
+  if (merchant) {
+    const fromMerchant = findCategoryByName(categories, merchant.categoryName);
+    if (fromMerchant) return fromMerchant;
+  }
+
   const fromAi = findCategoryByName(categories, hints.categoryName);
   const aiIsOutros = hints.categoryName?.toLowerCase().trim() === "outros";
   if (fromAi && !aiIsOutros) return fromAi;
@@ -135,6 +168,11 @@ export function inferLabelAndCategory(
   const food = inferFoodContext(raw);
   if (food) {
     return { label: food.label, categoryName: food.categoryName };
+  }
+
+  const merchant = detectMerchant(raw);
+  if (merchant) {
+    return { label: merchant.label, categoryName: merchant.categoryName };
   }
 
   const matched = matchByWholeWords(raw, categories);

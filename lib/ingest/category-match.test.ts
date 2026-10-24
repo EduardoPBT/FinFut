@@ -40,6 +40,11 @@ test("prioriza categoria da IA quando válida", () => {
   assert.equal(resolved?.name, "Compras online");
 });
 
+test("Uber no extrato vira Transporte", () => {
+  const inferred = inferLabelAndCategory("UBER *TRIP SAO PAULO", categories);
+  assert.equal(inferred.categoryName, "Transporte");
+});
+
 test("bolo vira Mercado, não Outros", () => {
   const inferred = inferLabelAndCategory("gastei 35 reais no bolo", categories);
   assert.equal(inferred.categoryName, "Mercado");

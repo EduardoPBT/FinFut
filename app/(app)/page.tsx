@@ -38,11 +38,11 @@ export default async function DashboardPage({
   ]);
   const accountBalances = balancesByAccount(workspace.bankAccounts, movements);
   const { startBalanceCents, scheduledInCents, scheduledOutCents, projection } =
-    await loadCashflowProjection(
-    workspace.household.id,
-    workspace.bankAccounts,
-    { annualEvents: extras.annualEvents },
-  );
+    await loadCashflowProjection(workspace.household.id, workspace.bankAccounts, {
+      annualEvents: extras.annualEvents,
+      movements,
+      statements: upcomingStatements,
+    });
   const insights = insightsFromMonth({
     incomeSources: month.incomeSources,
     incomeInstances: month.incomeInstances,
